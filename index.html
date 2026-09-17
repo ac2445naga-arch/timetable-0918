@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>時刻表・乗換検索</title>
+  <title>乗換検索</title>
   <style>
     /* 画面全体（body）の基本配置と背景 */
     body { font-family: sans-serif; margin: 0; padding: 15px; background: #f9f9f9; width: 100%; box-sizing: border-box; }
@@ -128,6 +128,17 @@
     </div>
 
     <div class="form-group">
+      <label>乗換の最大待ち時間</label>
+      <select id="maxTransferWait">
+        <option value="30">30分以内</option>
+        <option value="60">60分以内</option>
+        <option value="120" selected>2時間以内</option>
+        <option value="180">3時間以内</option>
+        <option value="9999">制限なし</option>
+      </select>
+    </div>
+
+    <div class="form-group">
       <label>検索基準</label>
       <select id="searchType">
         <option value="dep">出発時刻指定</option>
@@ -191,7 +202,6 @@
       return h > 0 ? `${h}時間${m}分` : `${m}分`;
     }
 
-    // 現在ボタン押下時処理（5分刻み切り上げ）
     function setCurrentDateTime() {
       const now = new Date();
       const day = now.getDay();
@@ -208,7 +218,6 @@
       let hours = now.getHours();
       let minutes = now.getMinutes();
 
-      // 分を直近の5分刻みに切り上げ (例: 12分 -> 15分, 58分 -> 00分(+1時間))
       minutes = Math.ceil(minutes / 5) * 5;
       if (minutes >= 60) {
         minutes = 0;
@@ -350,6 +359,7 @@
       const targetMin = timeToMinutes(document.getElementById('searchTime').value);
       const selectedDay = document.getElementById('dayType').value;
       const minTransferMin = Number(document.getElementById('minTransferTime').value);
+      const maxTransferWaitMin = Number(document.getElementById('maxTransferWait').value);
       const sortOrder = document.getElementById('sortOrder').value;
       const maxTransfers = 4;
 
@@ -376,13 +386,11 @@
 
           let isValid = true;
           
-          // 日を跨ぐ経路の除外
           if (arrTimeMin < depTimeMin) isValid = false;
 
           if (searchType === 'dep' && depTimeMin < targetMin) isValid = false;
           if (searchType === 'arr' && arrTimeMin > targetMin) isValid = false;
 
-          // 所要時間順選択時：乗換開始時刻（出発時刻）が指定時刻から2時間（120分）以上離れている場合は除外
           if (sortOrder === 'duration') {
             if (depTimeMin < targetMin || depTimeMin > targetMin + 120) {
               isValid = false;
@@ -417,16 +425,16 @@
           const rDepMin = timeToMinutes(r.出発時刻);
           const rArrMin = timeToMinutes(r.到着時刻);
 
-          // 単一区間で日を跨ぐ便を除外
           if (rArrMin < rDepMin) continue;
 
-          // 乗換時間チェック（2区間目以降は、前の到着時刻 + 指定余裕時間 以上が必要）
+          // 乗換時間チェック（最低時間 & 最大待ち時間の両方を判定）
           if (state.steps.length > 0) {
             const prevStep = state.steps[state.steps.length - 1];
             const prevArrMin = timeToMinutes(prevStep.到着時刻);
-            if (rDepMin < prevArrMin + minTransferMin) continue;
+            const waitTime = rDepMin - prevArrMin;
+
+            if (waitTime < minTransferMin || waitTime > maxTransferWaitMin) continue;
           } else {
-            // 最初の区間の場合は指定時刻以降
             if (rDepMin < state.currentTimeMin) continue;
           }
 
