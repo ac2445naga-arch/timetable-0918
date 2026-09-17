@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>時刻表・乗換検索</title>
+  <style>
+    body { font-family: sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; background: #f9f9f9; }
+    h1 { color: #333; text-align: center; }
+    .search-card { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); margin-bottom: 20px; }
+    .form-group { margin-bottom: 15px; }
+    label { display: block; font-weight: bold; margin-bottom: 5px; }
+    select, input, button { width: 100%; padding: 10px; font-size: 16px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
+    button { background: #0066cc; color: white; font-weight: bold; cursor: pointer; border: none; margin-top: 10px; }
+    button:hover { background: #0052a3; }
+    .result-item { background: white; padding: 15px; margin-bottom: 10px; border-radius: 6px; border-left: 5px solid #0066cc; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+    .route-step { margin: 5px 0; font-size: 15px; }
+    .badge { display: inline-block; padding: 2px 8px; font-size: 12px; background: #eee; border-radius: 4px; margin-right: 5px; }
+    .time { font-weight: bold; color: #d32f2f; }
+  </style>
+</head>
+<body>
+
+  <h1>時刻表・乗換検索</h1>
+
+  <div class="search-card">
+    <div class="form-group">
+      <label>出発駅</label>
+      <select id="depStation"></select>
+    </div>
+    <div class="form-group">
+      <label>到着駅</label>
+      <select id="arrStation"></select>
+    </div>
+    <div class="form-group">
+      <label>出発希望時刻 (HH:MM)</label>
+      <input type="time" id="depTime" value="06:00">
+    </div>
+    <button onclick="searchRoute()">経路を検索する</button>
+  </div>
+
+  <div id="results"></div>
+
+  <script>
+    // データ（のぼり・くだり統合）
+    const routes = [
+      // nobori.json データ
+      {"分類": "鹿児島本線", "行先": "大牟田行", "運行日": "全", "出発駅": "熊本", "出発時刻": "5:27", "到着駅": "上熊本", "到着時刻": "5:30"},
+      {"分類": "鹿児島本線", "行先": "大牟田行", "運行日": "全", "出発駅": "熊本", "出発時刻": "5:54", "到着駅": "上熊本", "到着時刻": "5:58"},
+      {"分類": "鹿児島本線", "行先": "大牟田行", "運行日": "全", "出発駅": "熊本", "出発時刻": "6:24", "到着駅": "上熊本", "到着時刻": "6:27"},
+      {"分類": "鹿児島本線", "行先": "銀水行", "運行日": "全", "出発駅": "熊本", "出発時刻": "6:54", "到着駅": "上熊本", "到着時刻": "6:57"},
+      {"分類": "JR代行", "行先": "", "運行日": "全", "出発駅": "八代", "出発時刻": "6:10", "到着駅": "新八代", "到着時刻": "6:30"},
+      {"分類": "つばめ302", "行先": "小倉行", "運行日": "全", "出発駅": "新八代", "出発時刻": "6:43", "到着駅": "熊本", "到着時刻": "6:57"},
+      {"分類": "鹿児島本線", "行先": "長洲行", "運行日": "全", "出発駅": "熊本", "出発時刻": "7:11", "到着駅": "上熊本", "到着時刻": "7:14"},
+      {"分類": "鹿児島本線", "行先": "鳥栖行", "運行日": "全", "出発駅": "熊本", "出発時刻": "7:29", "到着駅": "上熊本", "到着時刻": "7:33"},
+      {"分類": "産交バス", "行先": "八代産交行", "運行日": "全", "出発駅": "八代", "出発時刻": "6:31", "到着駅": "新八代", "到着時刻": "6:44"},
+      {"分類": "JR代行", "行先": "", "運行日": "全", "出発駅": "八代", "出発時刻": "6:45", "到着駅": "新八代", "到着時刻": "7:05"},
+      {"分類": "JR代行", "行先": "", "運行日": "全", "出発駅": "八代", "出発時刻": "6:50", "到着駅": "新八代", "到着時刻": "7:10"},
+      {"分類": "つばめ306", "行先": "博多行", "運行日": "全", "出発駅": "新八代", "出発時刻": "7:24", "到着駅": "熊本", "到着時刻": "7:38"},
+      {"分類": "鹿児島本線", "行先": "植木行", "運行日": "全", "出発駅": "熊本", "出発時刻": "7:49", "到着駅": "上熊本", "到着時刻": "7:53"},
+      {"分類": "鹿児島本線", "行先": "長洲行", "運行日": "全", "出発駅": "熊本", "出発時刻": "8:01", "到着駅": "上熊本", "到着時刻": "8:04"},
+      {"分類": "おれんじ代行", "行先": "", "運行日": "平日", "出発駅": "肥後高田", "出発時刻": "6:43", "到着駅": "八代", "到着時刻": "7:03"},
+      {"分類": "産交バス", "行先": "八代産交行", "運行日": "全", "出発駅": "八代", "出発時刻": "7:21", "到着駅": "新八代", "到着時刻": "7:34"},
+      {"分類": "JR代行", "行先": "", "運行日": "全", "出発駅": "八代", "出発時刻": "7:15", "到着駅": "新八代", "到着時刻": "7:35"},
+      {"分類": "JR代行", "行先": "", "運行日": "全", "出発駅": "八代", "出発時刻": "7:20", "到着駅": "新八代", "到着時刻": "7:40"},
+      {"分類": "つばめ308", "行先": "博多行", "運行日": "全", "出発駅": "新八代", "出発時刻": "7:52", "到着駅": "熊本", "到着時刻": "8:05"},
+      {"分類": "鹿児島本線", "行先": "大牟田行", "運行日": "全", "出発駅": "熊本", "出発時刻": "8:19", "到着駅": "上熊本", "到着時刻": "8:22"},
+      {"分類": "鹿児島本線", "行先": "鳥栖行", "運行日": "全", "出発駅": "熊本", "出発時刻": "8:30", "到着駅": "上熊本", "到着時刻": "8:33"},
+      {"分類": "産交バス", "行先": "八代市役所前行", "運行日": "平日", "出発駅": "高田駅前", "出発時刻": "7:24", "到着駅": "八代", "到着時刻": "7:33"},
+      {"分類": "JR代行", "行先": "", "運行日": "全", "出発駅": "八代", "出発時刻": "7:40", "到着駅": "新八代", "到着時刻": "8:00"},
+      {"分類": "JR代行", "行先": "", "運行日": "全", "出発駅": "八代", "出発時刻": "7:50", "到着駅": "新八代", "到着時刻": "8:10"},
+      {"分類": "さくら744", "行先": "新大阪行", "運行日": "全", "出発駅": "新八代", "出発時刻": "8:24", "到着駅": "熊本", "到着時刻": "8:38"},
+
+      // kudari.json データ
+      {"分類": "おれんじ代行", "行先": "", "運行日": "全", "出発駅": "八代", "出発時刻": "6:05", "到着駅": "肥後高田", "到着時刻": "6:15"},
+      {"分類": "つばめ303", "行先": "鹿児島中央行", "運行日": "全", "出発駅": "熊本", "出発時刻": "6:11", "到着駅": "新八代", "到着時刻": "6:25"},
+      {"分類": "JR代行", "行先": "", "運行日": "全", "出発駅": "新八代", "出発時刻": "6:40", "到着駅": "八代", "到着時刻": "7:00"},
+      {"分類": "鹿児島本線", "行先": "肥後大津行", "運行日": "全", "出発駅": "上熊本", "出発時刻": "6:24", "到着駅": "熊本", "到着時刻": "6:28"},
+      {"分類": "つばめ305", "行先": "鹿児島中央行", "運行日": "全", "出発駅": "熊本", "出発時刻": "6:35", "到着駅": "新八代", "到着時刻": "6:49"},
+      {"分類": "JR代行", "行先": "", "運行日": "全", "出発駅": "新八代", "出発時刻": "7:00", "到着駅": "八代", "到着時刻": "7:20"},
+      {"分類": "おれんじ代行", "行先": "", "運行日": "平日", "出発駅": "八代", "出発時刻": "7:27", "到着駅": "肥後高田", "到着時刻": "7:37"},
+      {"分類": "JR代行", "行先": "", "運行日": "全", "出発駅": "新八代", "出発時刻": "7:10", "到着駅": "八代", "到着時刻": "7:30"},
+      {"分類": "産交バス", "行先": "日奈久下西町行", "運行日": "平日", "出発駅": "八代", "出発時刻": "7:32", "到着駅": "高田駅前", "到着時刻": "7:41"},
+      {"分類": "鹿児島本線", "行先": "熊本行", "運行日": "全", "出発駅": "上熊本", "出発時刻": "6:38", "到着駅": "熊本", "到着時刻": "6:42"},
+      {"分類": "つばめ307", "行先": "鹿児島中央行", "運行日": "全", "出発駅": "熊本", "出発時刻": "7:01", "到着駅": "新八代", "到着時刻": "7:15"}
+    ];
+
+    // 分（HH:MM -> 分）変換関数
+    function timeToMinutes(timeStr) {
+      if (!timeStr) return 0;
+      const [h, m] = timeStr.split(':').map(Number);
+      return h * 60 + m;
+    }
+
+    // 駅ドロップダウン初期化
+    function initStationSelects() {
+      const stations = Array.from(new Set(routes.flatMap(r => [r.出発駅, r.到着駅]))).sort();
+      const depSelect = document.getElementById('depStation');
+      const arrSelect = document.getElementById('arrStation');
+
+      stations.forEach(s => {
+        depSelect.add(new Option(s, s));
+        arrSelect.add(new Option(s, s));
+      });
+      if (stations.length > 1) arrSelect.selectedIndex = 1;
+    }
+
+    // 経路検索ロジック
+    function searchRoute() {
+      const dep = document.getElementById('depStation').value;
+      const arr = document.getElementById('arrStation').value;
+      const depMin = timeToMinutes(document.getElementById('depTime').value);
+      const resultsDiv = document.getElementById('results');
+      resultsDiv.innerHTML = '';
+
+      if (dep === arr) {
+        resultsDiv.innerHTML = '<p>出発駅と到着駅に異なる駅を選択してください。</p>';
+        return;
+      }
+
+      let foundRoutes = [];
+
+      // 1. 直通便の検索
+      routes.forEach(r => {
+        if (r.出発駅 === dep && r.到着駅 === arr && timeToMinutes(r.出発時刻) >= depMin) {
+          foundRoutes.push({
+            type: '直通',
+            depTime: r.出発時刻,
+            arrTime: r.到着時刻,
+            steps: [r]
+          });
+        }
+      });
+
+      // 2. 1回乗り換え便の検索
+      routes.forEach(r1 => {
+        if (r1.出発駅 === dep && timeToMinutes(r1.出発時刻) >= depMin) {
+          const mDepMin = timeToMinutes(r1.到着時刻);
+          routes.forEach(r2 => {
+            if (r2.出発駅 === r1.到着駅 && r2.到着駅 === arr && timeToMinutes(r2.出発時刻) >= mDepMin) {
+              foundRoutes.push({
+                type: '乗換1回',
+                depTime: r1.出発時刻,
+                arrTime: r2.到着時刻,
+                steps: [r1, r2]
+              });
+            }
+          });
+        }
+      });
+
+      // 出発時刻順にソート
+      foundRoutes.sort((a, b) => timeToMinutes(a.depTime) - timeToMinutes(b.depTime));
+
+      if (foundRoutes.length === 0) {
+        resultsDiv.innerHTML = '<p>該当する経路が見つかりませんでした。</p>';
+        return;
+      }
+
+      // 検索結果表示
+      foundRoutes.forEach(route => {
+        const item = document.createElement('div');
+        item.className = 'result-item';
+
+        let html = `<div><span class="badge">${route.type}</span> <strong>${dep}</strong> (${route.depTime}) ➔ <strong>${arr}</strong> (${route.arrTime})</div><hr style="border:0; border-top:1px solid #eee; margin:10px 0;">`;
+
+        route.steps.forEach((step, idx) => {
+          html += `<div class="route-step">
+            ${idx + 1}. <span class="badge">${step.分類}</span> ${step.出発駅} <span class="time">${step.出発時刻}発</span> ➔ ${step.到着駅} <span class="time">${step.到着時刻}着</span> (${step.行先 || '行先指定なし'}) [${step.運行日}]
+          </div>`;
+        });
+
+        item.innerHTML = html;
+        resultsDiv.appendChild(item);
+      });
+    }
+
+    window.onload = initStationSelects;
+  </script>
+</body>
+</html>
