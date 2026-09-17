@@ -15,11 +15,16 @@
     button:hover { background: #0052a3; }
     button:disabled { background: #ccc; cursor: not-allowed; }
     .result-item { background: white; padding: 15px; margin-bottom: 10px; border-radius: 6px; border-left: 5px solid #0066cc; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+    .route-header { font-size: 16px; line-height: 1.5; }
     .route-step { margin: 8px 0; font-size: 15px; padding-left: 10px; border-left: 2px solid #ddd; }
     .badge { display: inline-block; padding: 2px 8px; font-size: 12px; background: #eee; border-radius: 4px; margin-right: 5px; }
     .badge-trans { background: #e3f2fd; color: #1565c0; font-weight: bold; }
+    .duration-badge { margin-left: 8px; font-weight: bold; color: #2e7d32; display: inline-block; }
     .time { font-weight: bold; color: #d32f2f; }
     .status-msg { text-align: center; color: #666; font-size: 14px; margin-bottom: 10px; }
+    .pagination-container { display: flex; justify-content: space-between; align-items: center; margin: 20px 0; }
+    .pagination-container button { width: auto; padding: 8px 16px; margin-top: 0; }
+    .pagination-info { font-weight: bold; color: #555; }
   </style>
 </head>
 <body>
@@ -49,16 +54,23 @@
     </div>
 
     <div class="form-group">
-      <label>出発希望時刻 (HH:MM)</label>
-      <input type="time" id="depTime" value="06:00">
+      <label>検索基準</label>
+      <select id="searchType">
+        <option value="dep">出発時刻指定</option>
+        <option value="arr">到着時刻指定</option>
+      </select>
     </div>
 
     <div class="form-group">
-      <label>最大乗り換え回数</label>
-      <select id="maxTransfers">
-        <option value="1">1回まで</option>
-        <option value="2">2回まで</option>
-        <option value="3" selected>3回まで</option>
+      <label id="timeLabel">指定時刻 (HH:MM)</label>
+      <input type="time" id="searchTime" value="06:00">
+    </div>
+
+    <div class="form-group">
+      <label>並び順</label>
+      <select id="sortOrder">
+        <option value="time">時間が進む順</option>
+        <option value="duration">所要時間順</option>
       </select>
     </div>
 
@@ -66,9 +78,15 @@
   </div>
 
   <div id="results"></div>
+  <div id="pagination" class="pagination-container"></div>
 
   <script>
     let routes = [];
+    let allSearchResults = [];
+    let currentPage = 1;
+    const itemsPerPage = 5;
+
+    const TAKADA_STATIONS = ['短大高専前', '高田駅前', '肥後高田'];
 
     // JSONデータの読み込み
     async function loadData() {
@@ -113,13 +131,27 @@
       return h * 60 + m;
     }
 
-    // 運行日と選択した曜日の適合判定
+    // 分単位を所要時間文字列（X時間Y分 / Y分）に変換
+    function formatDuration(minutes) {
+      if (minutes < 0) minutes += 24 * 60;
+      const h = Math.floor(minutes / 60);
+      const m = minutes % 60;
+      return h > 0 ? `${h}時間${m}分` : `${m}分`;
+    }
+
+    // 運行日適合判定
     function isOperatingOn(unkoDay, selectedDay) {
       if (unkoDay === '全') return true;
       if (selectedDay === '平日') return unkoDay === '平日';
       if (selectedDay === '土曜') return unkoDay === '土' || unkoDay === '土日祝';
       if (selectedDay === '日祝') return unkoDay === '日祝' || unkoDay === '土日祝';
       return true;
+    }
+
+    // 選択値から対象駅配列を取得
+    function getStationList(val) {
+      if (val === 'GROUP_TAKADA') return TAKADA_STATIONS;
+      return [val];
     }
 
     // 駅ドロップダウン初期化
@@ -131,73 +163,108 @@
       depSelect.innerHTML = '';
       arrSelect.innerHTML = '';
 
+      const groupOptionText = '高田エリア（短大高専前・高田駅前・肥後高田）';
+      depSelect.add(new Option(groupOptionText, 'GROUP_TAKADA'));
+      arrSelect.add(new Option(groupOptionText, 'GROUP_TAKADA'));
+
       stations.forEach(s => {
         depSelect.add(new Option(s, s));
         arrSelect.add(new Option(s, s));
       });
-      if (stations.length > 1) arrSelect.selectedIndex = 1;
+
+      depSelect.value = 'GROUP_TAKADA';
+      if (stations.includes('熊本')) {
+        arrSelect.value = '熊本';
+      } else if (stations.length > 0) {
+        arrSelect.selectedIndex = 1;
+      }
     }
 
-    // 幅優先探索（BFS）による複数回乗換対応の経路検索
+    // 経路検索処理
     function searchRoute() {
-      const dep = document.getElementById('depStation').value;
-      const arr = document.getElementById('arrStation').value;
-      const depMin = timeToMinutes(document.getElementById('depTime').value);
-      const selectedDay = document.getElementById('dayType').value;
-      const maxTransfers = parseInt(document.getElementById('maxTransfers').value, 10);
+      const depVal = document.getElementById('depStation').value;
+      const arrVal = document.getElementById('arrStation').value;
+      const depList = getStationList(depVal);
+      const arrList = getStationList(arrVal);
 
       const resultsDiv = document.getElementById('results');
+      const paginationDiv = document.getElementById('pagination');
       resultsDiv.innerHTML = '';
+      paginationDiv.innerHTML = '';
 
-      if (dep === arr) {
-        resultsDiv.innerHTML = '<p>出発駅と到着駅に異なる駅を選択してください。</p>';
+      // 出発地と目的地エリアの重複チェック
+      const hasOverlap = depList.some(s => arrList.includes(s));
+      if (hasOverlap) {
+        resultsDiv.innerHTML = '<p>出発駅と到着駅に同じ駅・エリアが含まれています。異なる駅を選択してください。</p>';
         return;
       }
 
-      let foundRoutes = [];
+      const searchType = document.getElementById('searchType').value;
+      const targetMin = timeToMinutes(document.getElementById('searchTime').value);
+      const selectedDay = document.getElementById('dayType').value;
+      const maxTransfers = 4; // 乗換上限4回（ステップ数最大5）
 
-      // 探索用キュー: 各要素は探索状態 { currentStation, currentTimeMin, steps, visited }
-      let queue = [{
-        currentStation: dep,
-        currentTimeMin: depMin,
-        steps: [],
-        visited: new Set([dep])
-      }];
+      let foundRoutes = [];
+      let queue = [];
+
+      // 初期状態セット
+      for (const startSt of depList) {
+        queue.push({
+          currentStation: startSt,
+          currentTimeMin: searchType === 'dep' ? targetMin : 0,
+          steps: [],
+          visited: new Set([startSt])
+        });
+      }
 
       while (queue.length > 0) {
         const state = queue.shift();
 
         // 目的駅に到達した場合
-        if (state.currentStation === arr && state.steps.length > 0) {
-          foundRoutes.push({
-            type: state.steps.length === 1 ? '直通' : `乗換${state.steps.length - 1}回`,
-            depTime: state.steps[0].出発時刻,
-            arrTime: state.steps[state.steps.length - 1].到着時刻,
-            steps: state.steps
-          });
+        if (arrList.includes(state.currentStation) && state.steps.length > 0) {
+          const firstStep = state.steps[0];
+          const lastStep = state.steps[state.steps.length - 1];
+          const depTimeMin = timeToMinutes(firstStep.出発時刻);
+          const arrTimeMin = timeToMinutes(lastStep.到着時刻);
+
+          let isValid = true;
+          if (searchType === 'dep' && depTimeMin < targetMin) isValid = false;
+          if (searchType === 'arr' && arrTimeMin > targetMin) isValid = false;
+
+          if (isValid) {
+            const durationMin = arrTimeMin - depTimeMin;
+            foundRoutes.push({
+              type: state.steps.length === 1 ? '直通' : `乗換${state.steps.length - 1}回`,
+              actualDep: firstStep.出発駅,
+              actualArr: lastStep.到着駅,
+              depTime: firstStep.出発時刻,
+              arrTime: lastStep.到着時刻,
+              depMin: depTimeMin,
+              arrMin: arrTimeMin,
+              durationMin: durationMin,
+              durationStr: formatDuration(durationMin),
+              steps: state.steps
+            });
+          }
           continue;
         }
 
-        // 上限（乗換回数 = ステップ数 - 1）を超えたらそれ以上伸ばさない
+        // 乗換回数上限チェック
         if (state.steps.length > maxTransfers) {
           continue;
         }
 
-        // 次の乗車可能便を探す
+        // 次の便を探索
         for (const r of routes) {
-          // 1. 曜日チェック
           if (!isOperatingOn(r.運行日, selectedDay)) continue;
-
-          // 2. 出発駅チェック
           if (r.出発駅 !== state.currentStation) continue;
-
-          // 3. ループ防止（すでに立ち寄った駅へは戻らない）
           if (state.visited.has(r.到着駅)) continue;
 
-          // 4. 時刻チェック（前の便の到着時刻以降に出発）
           const rDepMin = timeToMinutes(r.出発時刻);
+          const rArrMin = timeToMinutes(r.到着時刻);
+
           if (rDepMin >= state.currentTimeMin) {
-            const rArrMin = timeToMinutes(r.到着時刻);
+            if (searchType === 'arr' && rArrMin > targetMin) continue;
 
             const newVisited = new Set(state.visited);
             newVisited.add(r.到着駅);
@@ -212,20 +279,7 @@
         }
       }
 
-      // ソート（1. 出発時刻順、2. 到着時刻順、3. 乗り換え回数少順）
-      foundRoutes.sort((a, b) => {
-        const depA = timeToMinutes(a.depTime);
-        const depB = timeToMinutes(b.depTime);
-        if (depA !== depB) return depA - depB;
-
-        const arrA = timeToMinutes(a.arrTime);
-        const arrB = timeToMinutes(b.arrTime);
-        if (arrA !== arrB) return arrA - arrB;
-
-        return a.steps.length - b.steps.length;
-      });
-
-      // 同一経路の重複削除
+      // 重複排除
       const uniqueResults = [];
       const seenKeys = new Set();
       for (const res of foundRoutes) {
@@ -236,17 +290,52 @@
         }
       }
 
-      if (uniqueResults.length === 0) {
+      // ソート処理
+      const sortOrder = document.getElementById('sortOrder').value;
+      uniqueResults.sort((a, b) => {
+        if (sortOrder === 'duration') {
+          if (a.durationMin !== b.durationMin) return a.durationMin - b.durationMin;
+          return a.depMin - b.depMin;
+        } else {
+          if (a.depMin !== b.depMin) return a.depMin - b.depMin;
+          return a.arrMin - b.arrMin;
+        }
+      });
+
+      allSearchResults = uniqueResults;
+      currentPage = 1;
+      renderResults();
+    }
+
+    // 検索結果とページネーションの描写
+    function renderResults() {
+      const resultsDiv = document.getElementById('results');
+      const paginationDiv = document.getElementById('pagination');
+      resultsDiv.innerHTML = '';
+      paginationDiv.innerHTML = '';
+
+      if (allSearchResults.length === 0) {
         resultsDiv.innerHTML = '<p>条件に該当する経路が見つかりませんでした。</p>';
         return;
       }
 
-      // 検索結果のHTML生成
-      uniqueResults.forEach(route => {
+      const totalPages = Math.ceil(allSearchResults.length / itemsPerPage);
+      if (currentPage > totalPages) currentPage = totalPages;
+      if (currentPage < 1) currentPage = 1;
+
+      const startIdx = (currentPage - 1) * itemsPerPage;
+      const endIdx = startIdx + itemsPerPage;
+      const currentItems = allSearchResults.slice(startIdx, endIdx);
+
+      currentItems.forEach(route => {
         const item = document.createElement('div');
         item.className = 'result-item';
 
-        let html = `<div><span class="badge badge-trans">${route.type}</span> <strong>${dep}</strong> (${route.depTime}) ➔ <strong>${arr}</strong> (${route.arrTime})</div><hr style="border:0; border-top:1px solid #eee; margin:10px 0;">`;
+        let html = `<div class="route-header">
+          <span class="badge badge-trans">${route.type}</span>
+          <strong>${route.actualDep}</strong> (${route.depTime}) ➔ <strong>${route.actualArr}</strong> (${route.arrTime})
+          <span class="duration-badge">所要時間 ${route.durationStr}</span>
+        </div><hr style="border:0; border-top:1px solid #eee; margin:10px 0;">`;
 
         route.steps.forEach((step, idx) => {
           html += `<div class="route-step">
@@ -257,6 +346,22 @@
         item.innerHTML = html;
         resultsDiv.appendChild(item);
       });
+
+      // ページネーションコントロールの生成
+      if (totalPages > 1) {
+        paginationDiv.innerHTML = `
+          <button onclick="changePage(-1)" ${currentPage === 1 ? 'disabled' : ''}>前の5件</button>
+          <span class="pagination-info">${currentPage} / ${totalPages} ページ（全 ${allSearchResults.length} 件）</span>
+          <button onclick="changePage(1)" ${currentPage === totalPages ? 'disabled' : ''}>次の5件</button>
+        `;
+      }
+    }
+
+    // ページ切り替え処理
+    function changePage(delta) {
+      currentPage += delta;
+      renderResults();
+      window.scrollTo({ top: document.getElementById('results').offsetTop - 20, behavior: 'smooth' });
     }
 
     window.onload = loadData;
