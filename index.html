@@ -6,44 +6,47 @@
   <title>時刻表・乗換検索</title>
   <style>
     body { font-family: sans-serif; margin: 0; padding: 15px; background: #f9f9f9; width: 100%; box-sizing: border-box; }
-    .search-card { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); margin-bottom: 20px; width: 100%; box-sizing: border-box; }
+    .disclaimer { font-size: 13px; color: #666; text-align: center; margin-bottom: 10px; font-weight: bold; }
+    .search-card { background: white; padding: 20px; border-radius: 0; box-shadow: 0 2px 4px rgba(0,0,0,0.1); margin-bottom: 20px; width: 100%; box-sizing: border-box; }
     .form-group { margin-bottom: 15px; width: 100%; box-sizing: border-box; }
     label { display: block; font-weight: bold; margin-bottom: 5px; }
-    select, input, button { width: 100%; padding: 10px; font-size: 16px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; max-width: 100%; }
+    select, input, button { width: 100%; padding: 10px; font-size: 16px; border: 1px solid #ccc; border-radius: 0; box-sizing: border-box; max-width: 100%; }
     
     /* 駅入れ替えボタン */
     .swap-container { text-align: center; margin: -5px 0 10px 0; }
     .swap-btn {
-      background: #f0f0f0; color: #333; border: 1px solid #ccc;
+      background: #f0f0f0; color: #333; border: 1px solid #ccc; border-radius: 0;
       font-size: 14px; padding: 6px 16px; margin-top: 0; width: auto;
       display: inline-block; cursor: pointer;
     }
     .swap-btn:hover { background: #e0e0e0; }
 
-    /* 指定時刻入力＋現在ボタン（スマホはみ出し防止構造） */
+    /* 指定時刻入力＋現在ボタン */
     .time-input-container { display: flex; gap: 8px; align-items: center; width: 100%; box-sizing: border-box; }
-    .time-input-container input[type="time"] { flex: 1; min-width: 0; }
-    .now-btn { width: auto; white-space: nowrap; margin-top: 0; background: #666; color: white; padding: 10px 16px; flex-shrink: 0; cursor: pointer; border: none; }
+    .time-input-container input[type="time"] { flex: 1; min-width: 0; border-radius: 0; }
+    .now-btn { width: auto; white-space: nowrap; margin-top: 0; background: #666; color: white; padding: 10px 16px; flex-shrink: 0; cursor: pointer; border: none; border-radius: 0; }
     .now-btn:hover { background: #555; }
 
-    .search-submit-btn { background: #0066cc; color: white; font-weight: bold; cursor: pointer; border: none; margin-top: 10px; }
+    .search-submit-btn { background: #0066cc; color: white; font-weight: bold; cursor: pointer; border: none; margin-top: 10px; border-radius: 0; }
     .search-submit-btn:hover { background: #0052a3; }
     button:disabled { background: #ccc; cursor: not-allowed; }
 
-    .result-item { background: white; padding: 15px; margin-bottom: 10px; border-radius: 6px; border-left: 5px solid #0066cc; box-shadow: 0 1px 3px rgba(0,0,0,0.1); width: 100%; box-sizing: border-box; }
+    .result-item { background: white; padding: 15px; margin-bottom: 10px; border-radius: 0; border-left: 5px solid #0066cc; box-shadow: 0 1px 3px rgba(0,0,0,0.1); width: 100%; box-sizing: border-box; }
     .route-header { font-size: 16px; line-height: 1.5; }
     .route-step { margin: 8px 0; font-size: 15px; padding-left: 10px; border-left: 2px solid #ddd; }
-    .badge { display: inline-block; padding: 2px 8px; font-size: 12px; background: #eee; border-radius: 4px; margin-right: 5px; }
+    .badge { display: inline-block; padding: 2px 8px; font-size: 12px; background: #eee; border-radius: 0; margin-right: 5px; }
     .badge-trans { background: #e3f2fd; color: #1565c0; font-weight: bold; }
     .duration-badge { margin-left: 8px; font-weight: bold; color: #2e7d32; display: inline-block; }
     .time { font-weight: bold; color: #d32f2f; }
     .status-msg { text-align: center; color: #666; font-size: 14px; margin-bottom: 10px; }
     .pagination-container { display: flex; justify-content: space-between; align-items: center; margin: 15px 0; width: 100%; box-sizing: border-box; }
-    .pagination-container button { width: auto; padding: 8px 16px; margin-top: 0; }
+    .pagination-container button { width: auto; padding: 8px 16px; margin-top: 0; border-radius: 0; }
     .pagination-info { font-weight: bold; color: #555; }
   </style>
 </head>
 <body>
+
+  <div class="disclaimer">正確さを保証するものではありません。</div>
 
   <div class="search-card">
     <div id="status" class="status-msg">データを読み込み中...</div>
@@ -82,7 +85,7 @@
     <div class="form-group">
       <label id="timeLabel">指定時刻 (HH:MM)</label>
       <div class="time-input-container">
-        <input type="time" id="searchTime" value="06:00">
+        <input type="time" id="searchTime" value="08:30">
         <button type="button" class="now-btn" onclick="setCurrentDateTime()">現在</button>
       </div>
     </div>
@@ -129,13 +132,12 @@
     }
 
     function formatDuration(minutes) {
-      if (minutes < 0) minutes += 24 * 60;
+      if (minutes < 0) return '0分';
       const h = Math.floor(minutes / 60);
       const m = minutes % 60;
       return h > 0 ? `${h}時間${m}分` : `${m}分`;
     }
 
-    // 現在の曜日と時刻をセットする関数
     function setCurrentDateTime() {
       const now = new Date();
       const day = now.getDay();
@@ -154,7 +156,6 @@
       document.getElementById('searchTime').value = `${hours}:${minutes}`;
     }
 
-    // 出発駅と到着駅を入れ替える関数
     function swapStations() {
       const depSelect = document.getElementById('depStation');
       const arrSelect = document.getElementById('arrStation');
@@ -308,6 +309,10 @@
           const arrTimeMin = timeToMinutes(lastStep.到着時刻);
 
           let isValid = true;
+          
+          // 【追加】日を跨ぐ経路（到着が出発より前になる場合）を排除
+          if (arrTimeMin < depTimeMin) isValid = false;
+
           if (searchType === 'dep' && depTimeMin < targetMin) isValid = false;
           if (searchType === 'arr' && arrTimeMin > targetMin) isValid = false;
 
@@ -338,6 +343,9 @@
 
           const rDepMin = timeToMinutes(r.出発時刻);
           const rArrMin = timeToMinutes(r.到着時刻);
+
+          // 【追加】単体ステップで深夜0時を超えて日を跨ぐ便を除外
+          if (rArrMin < rDepMin) continue;
 
           if (rDepMin >= state.currentTimeMin) {
             if (searchType === 'arr' && rArrMin > targetMin) continue;
@@ -381,19 +389,16 @@
         }
       }
 
-      // ソート処理（指定されたロジックに更新）
+      // ソート処理
       const sortOrder = document.getElementById('sortOrder').value;
       uniqueResults.sort((a, b) => {
         if (sortOrder === 'depAsc') {
-          // 時間早い順：乗換の開始時刻（最初の出発時刻）が早い順
           if (a.depMin !== b.depMin) return a.depMin - b.depMin;
           return a.durationMin - b.durationMin;
         } else if (sortOrder === 'arrDesc') {
-          // 時間遅い順：乗換の終了時刻（最後の到着時刻）が遅い順
           if (a.arrMin !== b.arrMin) return b.arrMin - a.arrMin;
           return a.durationMin - b.durationMin;
         } else {
-          // 所要時間順
           if (a.durationMin !== b.durationMin) return a.durationMin - b.durationMin;
           return a.depMin - b.depMin;
         }
