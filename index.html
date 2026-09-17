@@ -5,16 +5,15 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>時刻表・乗換検索</title>
   <style>
-    body { font-family: sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; background: #f9f9f9; }
-    h1 { color: #333; text-align: center; }
-    .search-card { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); margin-bottom: 20px; }
+    body { font-family: sans-serif; margin: 0; padding: 15px; background: #f9f9f9; width: 100%; box-sizing: border-box; }
+    .search-card { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); margin-bottom: 20px; width: 100%; box-sizing: border-box; }
     .form-group { margin-bottom: 15px; }
     label { display: block; font-weight: bold; margin-bottom: 5px; }
     select, input, button { width: 100%; padding: 10px; font-size: 16px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
     button { background: #0066cc; color: white; font-weight: bold; cursor: pointer; border: none; margin-top: 10px; }
     button:hover { background: #0052a3; }
     button:disabled { background: #ccc; cursor: not-allowed; }
-    .result-item { background: white; padding: 15px; margin-bottom: 10px; border-radius: 6px; border-left: 5px solid #0066cc; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+    .result-item { background: white; padding: 15px; margin-bottom: 10px; border-radius: 6px; border-left: 5px solid #0066cc; box-shadow: 0 1px 3px rgba(0,0,0,0.1); width: 100%; box-sizing: border-box; }
     .route-header { font-size: 16px; line-height: 1.5; }
     .route-step { margin: 8px 0; font-size: 15px; padding-left: 10px; border-left: 2px solid #ddd; }
     .badge { display: inline-block; padding: 2px 8px; font-size: 12px; background: #eee; border-radius: 4px; margin-right: 5px; }
@@ -22,14 +21,12 @@
     .duration-badge { margin-left: 8px; font-weight: bold; color: #2e7d32; display: inline-block; }
     .time { font-weight: bold; color: #d32f2f; }
     .status-msg { text-align: center; color: #666; font-size: 14px; margin-bottom: 10px; }
-    .pagination-container { display: flex; justify-content: space-between; align-items: center; margin: 15px 0; }
+    .pagination-container { display: flex; justify-content: space-between; align-items: center; margin: 15px 0; width: 100%; box-sizing: border-box; }
     .pagination-container button { width: auto; padding: 8px 16px; margin-top: 0; }
     .pagination-info { font-weight: bold; color: #555; }
   </style>
 </head>
 <body>
-
-  <h1>時刻表・乗換検索</h1>
 
   <div class="search-card">
     <div id="status" class="status-msg">データを読み込み中...</div>
@@ -77,7 +74,6 @@
     <button id="searchBtn" onclick="searchRoute()" disabled>検索中...</button>
   </div>
 
-  <!-- ページネーションを検索結果カードの上に配置 -->
   <div id="pagination" class="pagination-container"></div>
   <div id="results"></div>
 
@@ -89,7 +85,7 @@
 
     const TAKADA_STATIONS = ['短大高専前', '高田駅前', '肥後高田'];
 
-    // JSONデータの読み込み
+    // JSONデータの読み込み（元データレベルでの重複排除を追加）
     async function loadData() {
       const statusDiv = document.getElementById('status');
       try {
@@ -105,7 +101,18 @@
         const noboriData = await noboriRes.json();
         const kudariData = await kudariRes.json();
 
-        routes = [...noboriData, ...kudariData];
+        // 1. JSONファイル間の重複データを排除
+        const rawRoutes = [...noboriData, ...kudariData];
+        const seenDataKeys = new Set();
+        routes = [];
+
+        for (const r of rawRoutes) {
+          const dataKey = `${r.分類 || ''}_${r.出発駅}_${r.出発時刻}_${r.到着駅}_${r.到着時刻}_${r.行先 || ''}_${r.運行日 || ''}`;
+          if (!seenDataKeys.has(dataKey)) {
+            seenDataKeys.add(dataKey);
+            routes.push(r);
+          }
+        }
 
         statusDiv.textContent = '';
         initStationSelects();
@@ -132,7 +139,7 @@
       return h * 60 + m;
     }
 
-    // 分単位を所要時間文字列（X時間Y分 / Y分）に変換
+    // 分単位を所要時間文字列に変換
     function formatDuration(minutes) {
       if (minutes < 0) minutes += 24 * 60;
       const h = Math.floor(minutes / 60);
@@ -155,7 +162,7 @@
       return [val];
     }
 
-    // 駅ドロップダウン初期化（デフォルト：出発＝熊本、到着＝高田エリア）
+    // 駅ドロップダウン初期化
     function initStationSelects() {
       const stations = Array.from(new Set(routes.flatMap(r => [r.出発駅, r.到着駅]))).sort();
       const depSelect = document.getElementById('depStation');
@@ -173,14 +180,12 @@
         arrSelect.add(new Option(s, s));
       });
 
-      // 出発駅デフォルト：熊本
       if (stations.includes('熊本')) {
         depSelect.value = '熊本';
       } else {
         depSelect.selectedIndex = 0;
       }
 
-      // 到着駅デフォルト：高田エリア
       arrSelect.value = 'GROUP_TAKADA';
     }
 
@@ -196,7 +201,6 @@
       resultsDiv.innerHTML = '';
       paginationDiv.innerHTML = '';
 
-      // 出発地と目的地エリアの重複チェック
       const hasOverlap = depList.some(s => arrList.includes(s));
       if (hasOverlap) {
         resultsDiv.innerHTML = '<p>出発駅と到着駅に同じ駅・エリアが含まれています。異なる駅を選択してください。</p>';
@@ -277,13 +281,14 @@
         }
       }
 
-      // 厳密な重複排除処理（すべてのステップの詳細情報を結合してユニーク判定）
+      // 2. 検索結果の完全重複排除（全ステップの属性を完全に一意キー化）
       const uniqueResults = [];
       const seenKeys = new Set();
+
       for (const res of foundRoutes) {
-        const key = res.steps.map(s =>
-          `${s.分類 || ''}_${s.出発駅}_${s.出発時刻}_${s.到着駅}_${s.到着時刻}_${s.行先 || ''}_${s.運行日 || ''}`
-        ).join('||');
+        const key = res.steps.map(s => 
+          `${s.分類 || ''}|${s.出発駅}|${s.出発時刻}|${s.到着駅}|${s.到着時刻}|${s.行先 || ''}|${s.運行日 || ''}`
+        ).join('==>');
 
         if (!seenKeys.has(key)) {
           seenKeys.add(key);
@@ -298,13 +303,10 @@
           if (a.durationMin !== b.durationMin) return a.durationMin - b.durationMin;
           return searchType === 'arr' ? (b.arrMin - a.arrMin) : (a.depMin - b.depMin);
         } else {
-          // 「時間順」：検索基準時刻に近い順
           if (searchType === 'arr') {
-            // 到着指定：指定時刻に一番近い（直前の）到着時間順（降順）
             if (a.arrMin !== b.arrMin) return b.arrMin - a.arrMin;
             return a.durationMin - b.durationMin;
           } else {
-            // 出発指定：指定時刻に一番近い（直後の）出発時間順（昇順）
             if (a.depMin !== b.depMin) return a.depMin - b.depMin;
             return a.durationMin - b.durationMin;
           }
@@ -332,7 +334,6 @@
       if (currentPage > totalPages) currentPage = totalPages;
       if (currentPage < 1) currentPage = 1;
 
-      // ページネーションボタンを上部に生成
       if (totalPages > 1) {
         paginationDiv.innerHTML = `
           <button onclick="changePage(-1)" ${currentPage === 1 ? 'disabled' : ''}>前の5件</button>
