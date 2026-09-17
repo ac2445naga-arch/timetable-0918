@@ -15,8 +15,9 @@
     button:hover { background: #0052a3; }
     button:disabled { background: #ccc; cursor: not-allowed; }
     .result-item { background: white; padding: 15px; margin-bottom: 10px; border-radius: 6px; border-left: 5px solid #0066cc; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
-    .route-step { margin: 5px 0; font-size: 15px; }
+    .route-step { margin: 8px 0; font-size: 15px; padding-left: 10px; border-left: 2px solid #ddd; }
     .badge { display: inline-block; padding: 2px 8px; font-size: 12px; background: #eee; border-radius: 4px; margin-right: 5px; }
+    .badge-trans { background: #e3f2fd; color: #1565c0; font-weight: bold; }
     .time { font-weight: bold; color: #d32f2f; }
     .status-msg { text-align: center; color: #666; font-size: 14px; margin-bottom: 10px; }
   </style>
@@ -27,18 +28,40 @@
 
   <div class="search-card">
     <div id="status" class="status-msg">データを読み込み中...</div>
+    
+    <div class="form-group">
+      <label>乗車日（曜日）</label>
+      <select id="dayType" disabled>
+        <option value="平日">平日</option>
+        <option value="土曜">土曜日</option>
+        <option value="日祝">日曜日・祝日</option>
+      </select>
+    </div>
+
     <div class="form-group">
       <label>出発駅</label>
       <select id="depStation" disabled></select>
     </div>
+
     <div class="form-group">
       <label>到着駅</label>
       <select id="arrStation" disabled></select>
     </div>
+
     <div class="form-group">
       <label>出発希望時刻 (HH:MM)</label>
       <input type="time" id="depTime" value="06:00">
     </div>
+
+    <div class="form-group">
+      <label>最大乗り換え回数</label>
+      <select id="maxTransfers">
+        <option value="1">1回まで</option>
+        <option value="2">2回まで</option>
+        <option value="3" selected>3回まで</option>
+      </select>
+    </div>
+
     <button id="searchBtn" onclick="searchRoute()" disabled>検索中...</button>
   </div>
 
@@ -47,7 +70,7 @@
   <script>
     let routes = [];
 
-    // 外部JSONファイルを並行取得して結合する
+    // JSONデータの読み込み
     async function loadData() {
       const statusDiv = document.getElementById('status');
       try {
@@ -63,13 +86,13 @@
         const noboriData = await noboriRes.json();
         const kudariData = await kudariRes.json();
 
-        // データの結合
         routes = [...noboriData, ...kudariData];
 
         statusDiv.textContent = '';
         initStationSelects();
 
         // フォームを有効化
+        document.getElementById('dayType').disabled = false;
         document.getElementById('depStation').disabled = false;
         document.getElementById('arrStation').disabled = false;
         const searchBtn = document.getElementById('searchBtn');
@@ -79,7 +102,7 @@
       } catch (error) {
         console.error(error);
         statusDiv.style.color = 'red';
-        statusDiv.textContent = 'データの読み込みに失敗しました。jsonファイルが同じフォルダにあるか確認してください。';
+        statusDiv.textContent = 'データの読み込みに失敗しました。jsonファイルを確認してください。';
       }
     }
 
@@ -90,7 +113,16 @@
       return h * 60 + m;
     }
 
-    // 駅名のドロップダウン設定
+    // 運行日と選択した曜日の適合判定
+    function isOperatingOn(unkoDay, selectedDay) {
+      if (unkoDay === '全') return true;
+      if (selectedDay === '平日') return unkoDay === '平日';
+      if (selectedDay === '土曜') return unkoDay === '土' || unkoDay === '土日祝';
+      if (selectedDay === '日祝') return unkoDay === '日祝' || unkoDay === '土日祝';
+      return true;
+    }
+
+    // 駅ドロップダウン初期化
     function initStationSelects() {
       const stations = Array.from(new Set(routes.flatMap(r => [r.出発駅, r.到着駅]))).sort();
       const depSelect = document.getElementById('depStation');
@@ -106,11 +138,14 @@
       if (stations.length > 1) arrSelect.selectedIndex = 1;
     }
 
-    // 経路検索処理
+    // 幅優先探索（BFS）による複数回乗換対応の経路検索
     function searchRoute() {
       const dep = document.getElementById('depStation').value;
       const arr = document.getElementById('arrStation').value;
       const depMin = timeToMinutes(document.getElementById('depTime').value);
+      const selectedDay = document.getElementById('dayType').value;
+      const maxTransfers = parseInt(document.getElementById('maxTransfers').value, 10);
+
       const resultsDiv = document.getElementById('results');
       resultsDiv.innerHTML = '';
 
@@ -121,51 +156,101 @@
 
       let foundRoutes = [];
 
-      // 直通便検索
-      routes.forEach(r => {
-        if (r.出発駅 === dep && r.到着駅 === arr && timeToMinutes(r.出発時刻) >= depMin) {
+      // 探索用キュー: 各要素は探索状態 { currentStation, currentTimeMin, steps, visited }
+      let queue = [{
+        currentStation: dep,
+        currentTimeMin: depMin,
+        steps: [],
+        visited: new Set([dep])
+      }];
+
+      while (queue.length > 0) {
+        const state = queue.shift();
+
+        // 目的駅に到達した場合
+        if (state.currentStation === arr && state.steps.length > 0) {
           foundRoutes.push({
-            type: '直通',
-            depTime: r.出発時刻,
-            arrTime: r.到着時刻,
-            steps: [r]
+            type: state.steps.length === 1 ? '直通' : `乗換${state.steps.length - 1}回`,
+            depTime: state.steps[0].出発時刻,
+            arrTime: state.steps[state.steps.length - 1].到着時刻,
+            steps: state.steps
           });
+          continue;
         }
+
+        // 上限（乗換回数 = ステップ数 - 1）を超えたらそれ以上伸ばさない
+        if (state.steps.length > maxTransfers) {
+          continue;
+        }
+
+        // 次の乗車可能便を探す
+        for (const r of routes) {
+          // 1. 曜日チェック
+          if (!isOperatingOn(r.運行日, selectedDay)) continue;
+
+          // 2. 出発駅チェック
+          if (r.出発駅 !== state.currentStation) continue;
+
+          // 3. ループ防止（すでに立ち寄った駅へは戻らない）
+          if (state.visited.has(r.到着駅)) continue;
+
+          // 4. 時刻チェック（前の便の到着時刻以降に出発）
+          const rDepMin = timeToMinutes(r.出発時刻);
+          if (rDepMin >= state.currentTimeMin) {
+            const rArrMin = timeToMinutes(r.到着時刻);
+
+            const newVisited = new Set(state.visited);
+            newVisited.add(r.到着駅);
+
+            queue.push({
+              currentStation: r.到着駅,
+              currentTimeMin: rArrMin,
+              steps: [...state.steps, r],
+              visited: newVisited
+            });
+          }
+        }
+      }
+
+      // ソート（1. 出発時刻順、2. 到着時刻順、3. 乗り換え回数少順）
+      foundRoutes.sort((a, b) => {
+        const depA = timeToMinutes(a.depTime);
+        const depB = timeToMinutes(b.depTime);
+        if (depA !== depB) return depA - depB;
+
+        const arrA = timeToMinutes(a.arrTime);
+        const arrB = timeToMinutes(b.arrTime);
+        if (arrA !== arrB) return arrA - arrB;
+
+        return a.steps.length - b.steps.length;
       });
 
-      // 1回乗り換え検索
-      routes.forEach(r1 => {
-        if (r1.出発駅 === dep && timeToMinutes(r1.出発時刻) >= depMin) {
-          const mDepMin = timeToMinutes(r1.到着時刻);
-          routes.forEach(r2 => {
-            if (r2.出発駅 === r1.到着駅 && r2.到着駅 === arr && timeToMinutes(r2.出発時刻) >= mDepMin) {
-              foundRoutes.push({
-                type: '乗換1回',
-                depTime: r1.出発時刻,
-                arrTime: r2.到着時刻,
-                steps: [r1, r2]
-              });
-            }
-          });
+      // 同一経路の重複削除
+      const uniqueResults = [];
+      const seenKeys = new Set();
+      for (const res of foundRoutes) {
+        const key = res.steps.map(s => `${s.分類}_${s.出発駅}_${s.出発時刻}_${s.到着駅}_${s.到着時刻}`).join('|');
+        if (!seenKeys.has(key)) {
+          seenKeys.add(key);
+          uniqueResults.push(res);
         }
-      });
+      }
 
-      foundRoutes.sort((a, b) => timeToMinutes(a.depTime) - timeToMinutes(b.depTime));
-
-      if (foundRoutes.length === 0) {
-        resultsDiv.innerHTML = '<p>該当する経路が見つかりませんでした。</p>';
+      if (uniqueResults.length === 0) {
+        resultsDiv.innerHTML = '<p>条件に該当する経路が見つかりませんでした。</p>';
         return;
       }
 
-      foundRoutes.forEach(route => {
+      // 検索結果のHTML生成
+      uniqueResults.forEach(route => {
         const item = document.createElement('div');
         item.className = 'result-item';
 
-        let html = `<div><span class="badge">${route.type}</span> <strong>${dep}</strong> (${route.depTime}) ➔ <strong>${arr}</strong> (${route.arrTime})</div><hr style="border:0; border-top:1px solid #eee; margin:10px 0;">`;
+        let html = `<div><span class="badge badge-trans">${route.type}</span> <strong>${dep}</strong> (${route.depTime}) ➔ <strong>${arr}</strong> (${route.arrTime})</div><hr style="border:0; border-top:1px solid #eee; margin:10px 0;">`;
 
         route.steps.forEach((step, idx) => {
           html += `<div class="route-step">
-            ${idx + 1}. <span class="badge">${step.分類}</span> ${step.出発駅} <span class="time">${step.出発時刻}発</span> ➔ ${step.到着駅} <span class="time">${step.到着時刻}着</span> (${step.行先 || '行先指定なし'}) [${step.運行日}]
+            ${idx + 1}. <span class="badge">${step.分類}</span> ${step.出発駅} <span class="time">${step.出発時刻}発</span> ➔ ${step.到着駅} <span class="time">${step.到着時刻}着</span> ${step.行先 ? `(${step.行先})` : ''} [${step.運行日}]
           </div>`;
         });
 
@@ -174,7 +259,6 @@
       });
     }
 
-    // ページ読み込み時にデータ取得を開始
     window.onload = loadData;
   </script>
 </body>
