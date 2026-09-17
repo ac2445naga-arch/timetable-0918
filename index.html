@@ -7,12 +7,29 @@
   <style>
     body { font-family: sans-serif; margin: 0; padding: 15px; background: #f9f9f9; width: 100%; box-sizing: border-box; }
     .search-card { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); margin-bottom: 20px; width: 100%; box-sizing: border-box; }
-    .form-group { margin-bottom: 15px; }
+    .form-group { margin-bottom: 15px; width: 100%; box-sizing: border-box; }
     label { display: block; font-weight: bold; margin-bottom: 5px; }
-    select, input, button { width: 100%; padding: 10px; font-size: 16px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
-    button { background: #0066cc; color: white; font-weight: bold; cursor: pointer; border: none; margin-top: 10px; }
-    button:hover { background: #0052a3; }
+    select, input, button { width: 100%; padding: 10px; font-size: 16px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; max-width: 100%; }
+    
+    /* 駅入れ替えボタン */
+    .swap-container { text-align: center; margin: -5px 0 10px 0; }
+    .swap-btn {
+      background: #f0f0f0; color: #333; border: 1px solid #ccc;
+      font-size: 14px; padding: 6px 16px; margin-top: 0; width: auto;
+      display: inline-block; cursor: pointer;
+    }
+    .swap-btn:hover { background: #e0e0e0; }
+
+    /* 指定時刻入力＋現在ボタン（スマホはみ出し防止構造） */
+    .time-input-container { display: flex; gap: 8px; align-items: center; width: 100%; box-sizing: border-box; }
+    .time-input-container input[type="time"] { flex: 1; min-width: 0; }
+    .now-btn { width: auto; white-space: nowrap; margin-top: 0; background: #666; color: white; padding: 10px 16px; flex-shrink: 0; cursor: pointer; border: none; }
+    .now-btn:hover { background: #555; }
+
+    .search-submit-btn { background: #0066cc; color: white; font-weight: bold; cursor: pointer; border: none; margin-top: 10px; }
+    .search-submit-btn:hover { background: #0052a3; }
     button:disabled { background: #ccc; cursor: not-allowed; }
+
     .result-item { background: white; padding: 15px; margin-bottom: 10px; border-radius: 6px; border-left: 5px solid #0066cc; box-shadow: 0 1px 3px rgba(0,0,0,0.1); width: 100%; box-sizing: border-box; }
     .route-header { font-size: 16px; line-height: 1.5; }
     .route-step { margin: 8px 0; font-size: 15px; padding-left: 10px; border-left: 2px solid #ddd; }
@@ -45,6 +62,10 @@
       <select id="depStation" disabled></select>
     </div>
 
+    <div class="swap-container">
+      <button type="button" class="swap-btn" onclick="swapStations()">↑↓ 出発駅と到着駅を入れ替える</button>
+    </div>
+
     <div class="form-group">
       <label>到着駅</label>
       <select id="arrStation" disabled></select>
@@ -60,18 +81,22 @@
 
     <div class="form-group">
       <label id="timeLabel">指定時刻 (HH:MM)</label>
-      <input type="time" id="searchTime" value="06:00">
+      <div class="time-input-container">
+        <input type="time" id="searchTime" value="06:00">
+        <button type="button" class="now-btn" onclick="setCurrentDateTime()">現在</button>
+      </div>
     </div>
 
     <div class="form-group">
       <label>並び順</label>
       <select id="sortOrder">
-        <option value="time">時間順</option>
+        <option value="depAsc">時間早い順（開始時刻が早い順）</option>
+        <option value="arrDesc">時間遅い順（終了時刻が遅い順）</option>
         <option value="duration">所要時間順</option>
       </select>
     </div>
 
-    <button id="searchBtn" onclick="searchRoute()" disabled>検索中...</button>
+    <button id="searchBtn" class="search-submit-btn" onclick="searchRoute()" disabled>検索中...</button>
   </div>
 
   <div id="pagination" class="pagination-container"></div>
@@ -108,6 +133,34 @@
       const h = Math.floor(minutes / 60);
       const m = minutes % 60;
       return h > 0 ? `${h}時間${m}分` : `${m}分`;
+    }
+
+    // 現在の曜日と時刻をセットする関数
+    function setCurrentDateTime() {
+      const now = new Date();
+      const day = now.getDay();
+      const daySelect = document.getElementById('dayType');
+      
+      if (day === 0) {
+        daySelect.value = '日祝';
+      } else if (day === 6) {
+        daySelect.value = '土曜';
+      } else {
+        daySelect.value = '平日';
+      }
+
+      const hours = String(now.getHours()).padStart(2, '0');
+      const minutes = String(now.getMinutes()).padStart(2, '0');
+      document.getElementById('searchTime').value = `${hours}:${minutes}`;
+    }
+
+    // 出発駅と到着駅を入れ替える関数
+    function swapStations() {
+      const depSelect = document.getElementById('depStation');
+      const arrSelect = document.getElementById('arrStation');
+      const temp = depSelect.value;
+      depSelect.value = arrSelect.value;
+      arrSelect.value = temp;
     }
 
     async function loadData() {
@@ -193,7 +246,7 @@
       depSelect.innerHTML = '';
       arrSelect.innerHTML = '';
 
-      const groupOptionText = '高専エリア（短大高専前・高田駅前・肥後高田）';
+      const groupOptionText = '高田エリア（短大高専前・高田駅前・肥後高田）';
       depSelect.add(new Option(groupOptionText, 'GROUP_TAKADA'));
       arrSelect.add(new Option(groupOptionText, 'GROUP_TAKADA'));
 
@@ -302,8 +355,7 @@
         }
       }
 
-      // 【抜本的改修】重複排除ロジック
-      // 1. タイムラインキー（移動手段 × 出発時刻 × 到着時刻）で一致する同刻便を一意化
+      // 重複排除ロジック
       const uniqueResults = [];
       const seenTimelineKeys = new Map();
 
@@ -313,7 +365,6 @@
         if (!seenTimelineKeys.has(timelineKey)) {
           seenTimelineKeys.set(timelineKey, res);
         } else {
-          // すでに同じタイムラインが存在する場合は、乗換回数が少なく所要時間が短い方を残す
           const existing = seenTimelineKeys.get(timelineKey);
           if (res.steps.length < existing.steps.length || res.durationMin < existing.durationMin) {
             seenTimelineKeys.set(timelineKey, res);
@@ -321,7 +372,6 @@
         }
       }
 
-      // 2. 概要キー（全行程の出発時刻 × 到着時刻 × 所要時間 × 乗換数）で最終二重チェック
       const seenSummaryKeys = new Set();
       for (const res of seenTimelineKeys.values()) {
         const summaryKey = `${res.depTime}_${res.arrTime}_${res.durationMin}_${res.steps.length}`;
@@ -331,20 +381,21 @@
         }
       }
 
-      // ソート処理
+      // ソート処理（指定されたロジックに更新）
       const sortOrder = document.getElementById('sortOrder').value;
       uniqueResults.sort((a, b) => {
-        if (sortOrder === 'duration') {
-          if (a.durationMin !== b.durationMin) return a.durationMin - b.durationMin;
-          return searchType === 'arr' ? (b.arrMin - a.arrMin) : (a.depMin - b.depMin);
+        if (sortOrder === 'depAsc') {
+          // 時間早い順：乗換の開始時刻（最初の出発時刻）が早い順
+          if (a.depMin !== b.depMin) return a.depMin - b.depMin;
+          return a.durationMin - b.durationMin;
+        } else if (sortOrder === 'arrDesc') {
+          // 時間遅い順：乗換の終了時刻（最後の到着時刻）が遅い順
+          if (a.arrMin !== b.arrMin) return b.arrMin - a.arrMin;
+          return a.durationMin - b.durationMin;
         } else {
-          if (searchType === 'arr') {
-            if (a.arrMin !== b.arrMin) return b.arrMin - a.arrMin;
-            return a.durationMin - b.durationMin;
-          } else {
-            if (a.depMin !== b.depMin) return a.depMin - b.depMin;
-            return a.durationMin - b.durationMin;
-          }
+          // 所要時間順
+          if (a.durationMin !== b.durationMin) return a.durationMin - b.durationMin;
+          return a.depMin - b.depMin;
         }
       });
 
