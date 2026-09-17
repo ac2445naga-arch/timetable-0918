@@ -85,7 +85,36 @@
 
     const TAKADA_STATIONS = ['短大高専前', '高田駅前', '肥後高田'];
 
-    // JSONデータの読み込み（元データレベルでの重複排除を追加）
+    // 文字列の余分な空白を除去する正規化関数
+    function normalizeStr(str) {
+      return (str || '').toString().trim();
+    }
+
+    // 時刻フォーマットを HH:MM 形式に統一する正規化関数
+    function normalizeTime(timeStr) {
+      if (!timeStr) return '00:00';
+      const cleanStr = timeStr.toString().trim();
+      const [h, m] = cleanStr.split(':').map(Number);
+      if (isNaN(h) || isNaN(m)) return cleanStr;
+      return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+    }
+
+    // 時刻（HH:MM）を分単位に変換
+    function timeToMinutes(timeStr) {
+      const norm = normalizeTime(timeStr);
+      const [h, m] = norm.split(':').map(Number);
+      return h * 60 + m;
+    }
+
+    // 分単位を所要時間文字列に変換
+    function formatDuration(minutes) {
+      if (minutes < 0) minutes += 24 * 60;
+      const h = Math.floor(minutes / 60);
+      const m = minutes % 60;
+      return h > 0 ? `${h}時間${m}分` : `${m}分`;
+    }
+
+    // JSONデータの読み込みおよび全データ一括正規化・一次重複排除
     async function loadData() {
       const statusDiv = document.getElementById('status');
       try {
@@ -101,23 +130,40 @@
         const noboriData = await noboriRes.json();
         const kudariData = await kudariRes.json();
 
-        // 1. JSONファイル間の重複データを排除
         const rawRoutes = [...noboriData, ...kudariData];
         const seenDataKeys = new Set();
         routes = [];
 
+        // データの正規化とJSON内の完全重複データの排除
         for (const r of rawRoutes) {
-          const dataKey = `${r.分類 || ''}_${r.出発駅}_${r.出発時刻}_${r.到着駅}_${r.到着時刻}_${r.行先 || ''}_${r.運行日 || ''}`;
+          const cat = normalizeStr(r.分類);
+          const depSt = normalizeStr(r.出発駅);
+          const depT = normalizeTime(r.出発時刻);
+          const arrSt = normalizeStr(r.到着駅);
+          const arrT = normalizeTime(r.到着時刻);
+          const dest = normalizeStr(r.行先);
+          const day = normalizeStr(r.運行日);
+
+          const normalizedObj = {
+            分類: cat,
+            出発駅: depSt,
+            出発時刻: depT,
+            到着駅: arrSt,
+            到着時刻: arrT,
+            行先: dest,
+            運行日: day
+          };
+
+          const dataKey = `${cat}_${depSt}_${depT}_${arrSt}_${arrT}_${dest}_${day}`;
           if (!seenDataKeys.has(dataKey)) {
             seenDataKeys.add(dataKey);
-            routes.push(r);
+            routes.push(normalizedObj);
           }
         }
 
         statusDiv.textContent = '';
         initStationSelects();
 
-        // フォームを有効化
         document.getElementById('dayType').disabled = false;
         document.getElementById('depStation').disabled = false;
         document.getElementById('arrStation').disabled = false;
@@ -132,22 +178,6 @@
       }
     }
 
-    // 時刻（HH:MM）を分単位に変換
-    function timeToMinutes(timeStr) {
-      if (!timeStr) return 0;
-      const [h, m] = timeStr.split(':').map(Number);
-      return h * 60 + m;
-    }
-
-    // 分単位を所要時間文字列に変換
-    function formatDuration(minutes) {
-      if (minutes < 0) minutes += 24 * 60;
-      const h = Math.floor(minutes / 60);
-      const m = minutes % 60;
-      return h > 0 ? `${h}時間${m}分` : `${m}分`;
-    }
-
-    // 運行日適合判定
     function isOperatingOn(unkoDay, selectedDay) {
       if (unkoDay === '全') return true;
       if (selectedDay === '平日') return unkoDay === '平日';
@@ -156,13 +186,11 @@
       return true;
     }
 
-    // 選択値から対象駅配列を取得
     function getStationList(val) {
       if (val === 'GROUP_TAKADA') return TAKADA_STATIONS;
       return [val];
     }
 
-    // 駅ドロップダウン初期化
     function initStationSelects() {
       const stations = Array.from(new Set(routes.flatMap(r => [r.出発駅, r.到着駅]))).sort();
       const depSelect = document.getElementById('depStation');
@@ -189,7 +217,6 @@
       arrSelect.value = 'GROUP_TAKADA';
     }
 
-    // 経路検索処理
     function searchRoute() {
       const depVal = document.getElementById('depStation').value;
       const arrVal = document.getElementById('arrStation').value;
@@ -281,13 +308,14 @@
         }
       }
 
-      // 2. 検索結果の完全重複排除（全ステップの属性を完全に一意キー化）
+      // 検索結果の最終的な厳密判定による重複削除
+      // 各ステップの「種別・出発駅・出発時刻・到着駅・到着時刻」を紐づけた絶対キーで一意化
       const uniqueResults = [];
       const seenKeys = new Set();
 
       for (const res of foundRoutes) {
         const key = res.steps.map(s => 
-          `${s.分類 || ''}|${s.出発駅}|${s.出発時刻}|${s.到着駅}|${s.到着時刻}|${s.行先 || ''}|${s.運行日 || ''}`
+          `${s.分類}|${s.出発駅}|${s.出発時刻}|${s.到着駅}|${s.到着時刻}`
         ).join('==>');
 
         if (!seenKeys.has(key)) {
@@ -318,7 +346,6 @@
       renderResults();
     }
 
-    // 検索結果とページネーションの描画
     function renderResults() {
       const resultsDiv = document.getElementById('results');
       const paginationDiv = document.getElementById('pagination');
@@ -357,7 +384,7 @@
 
         route.steps.forEach((step, idx) => {
           html += `<div class="route-step">
-            ${idx + 1}. <span class="badge">${step.分類}</span> ${step.出発駅} <span class="time">${step.出発時刻}発</span> ➔ ${step.到着駅} <span class="time">${step.到着時刻}着</span> ${step.行先 ? `(${step.行先})` : ''} [${step.運行日}]
+            ${idx + 1}. <span class="badge">${step.分類}</span> ${step.出発駅} <span class="time">${step.出発時刻}发</span> ➔ ${step.到着駅} <span class="time">${step.到着時刻}着</span> ${step.行先 ? `(${step.行先})` : ''} [${step.運行日}]
           </div>`;
         });
 
@@ -366,7 +393,6 @@
       });
     }
 
-    // ページ切り替え処理
     function changePage(delta) {
       currentPage += delta;
       renderResults();
