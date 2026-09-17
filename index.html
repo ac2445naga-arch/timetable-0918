@@ -85,12 +85,10 @@
 
     const TAKADA_STATIONS = ['短大高専前', '高田駅前', '肥後高田'];
 
-    // 文字列の余分な空白を除去する正規化関数
     function normalizeStr(str) {
       return (str || '').toString().trim();
     }
 
-    // 時刻フォーマットを HH:MM 形式に統一する正規化関数
     function normalizeTime(timeStr) {
       if (!timeStr) return '00:00';
       const cleanStr = timeStr.toString().trim();
@@ -99,14 +97,12 @@
       return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
     }
 
-    // 時刻（HH:MM）を分単位に変換
     function timeToMinutes(timeStr) {
       const norm = normalizeTime(timeStr);
       const [h, m] = norm.split(':').map(Number);
       return h * 60 + m;
     }
 
-    // 分単位を所要時間文字列に変換
     function formatDuration(minutes) {
       if (minutes < 0) minutes += 24 * 60;
       const h = Math.floor(minutes / 60);
@@ -114,7 +110,6 @@
       return h > 0 ? `${h}時間${m}分` : `${m}分`;
     }
 
-    // JSONデータの読み込みおよび全データ一括正規化・一次重複排除
     async function loadData() {
       const statusDiv = document.getElementById('status');
       try {
@@ -134,7 +129,6 @@
         const seenDataKeys = new Set();
         routes = [];
 
-        // データの正規化とJSON内の完全重複データの排除
         for (const r of rawRoutes) {
           const cat = normalizeStr(r.分類);
           const depSt = normalizeStr(r.出発駅);
@@ -199,7 +193,7 @@
       depSelect.innerHTML = '';
       arrSelect.innerHTML = '';
 
-      const groupOptionText = '高田エリア（短大高専前・高田駅前・肥後高田）';
+      const groupOptionText = '高専エリア（短大高専前・高田駅前・肥後高田）';
       depSelect.add(new Option(groupOptionText, 'GROUP_TAKADA'));
       arrSelect.add(new Option(groupOptionText, 'GROUP_TAKADA'));
 
@@ -308,18 +302,31 @@
         }
       }
 
-      // 検索結果の最終的な厳密判定による重複削除
-      // 各ステップの「種別・出発駅・出発時刻・到着駅・到着時刻」を紐づけた絶対キーで一意化
+      // 【抜本的改修】重複排除ロジック
+      // 1. タイムラインキー（移動手段 × 出発時刻 × 到着時刻）で一致する同刻便を一意化
       const uniqueResults = [];
-      const seenKeys = new Set();
+      const seenTimelineKeys = new Map();
 
       for (const res of foundRoutes) {
-        const key = res.steps.map(s => 
-          `${s.分類}|${s.出発駅}|${s.出発時刻}|${s.到着駅}|${s.到着時刻}`
-        ).join('==>');
+        const timelineKey = res.steps.map(s => `${s.分類}_${s.出発時刻}_${s.到着時刻}`).join('-->');
 
-        if (!seenKeys.has(key)) {
-          seenKeys.add(key);
+        if (!seenTimelineKeys.has(timelineKey)) {
+          seenTimelineKeys.set(timelineKey, res);
+        } else {
+          // すでに同じタイムラインが存在する場合は、乗換回数が少なく所要時間が短い方を残す
+          const existing = seenTimelineKeys.get(timelineKey);
+          if (res.steps.length < existing.steps.length || res.durationMin < existing.durationMin) {
+            seenTimelineKeys.set(timelineKey, res);
+          }
+        }
+      }
+
+      // 2. 概要キー（全行程の出発時刻 × 到着時刻 × 所要時間 × 乗換数）で最終二重チェック
+      const seenSummaryKeys = new Set();
+      for (const res of seenTimelineKeys.values()) {
+        const summaryKey = `${res.depTime}_${res.arrTime}_${res.durationMin}_${res.steps.length}`;
+        if (!seenSummaryKeys.has(summaryKey)) {
+          seenSummaryKeys.add(summaryKey);
           uniqueResults.push(res);
         }
       }
@@ -384,7 +391,7 @@
 
         route.steps.forEach((step, idx) => {
           html += `<div class="route-step">
-            ${idx + 1}. <span class="badge">${step.分類}</span> ${step.出発駅} <span class="time">${step.出発時刻}发</span> ➔ ${step.到着駅} <span class="time">${step.到着時刻}着</span> ${step.行先 ? `(${step.行先})` : ''} [${step.運行日}]
+            ${idx + 1}. <span class="badge">${step.分類}</span> ${step.出発駅} <span class="time">${step.出発時刻}発</span> ➔ ${step.到着駅} <span class="time">${step.到着時刻}着</span> ${step.行先 ? `(${step.行先})` : ''} [${step.運行日}]
           </div>`;
         });
 
