@@ -3,17 +3,30 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>代行輸送乗換検索</title>
+  <title>時刻表・乗換検索</title>
   <style>
+    /* 画面全体（body）の基本配置と背景 */
     body { font-family: sans-serif; margin: 0; padding: 15px; background: #f9f9f9; width: 100%; box-sizing: border-box; }
+    
+    /* ページ最上部の注記テキスト */
     .disclaimer { font-size: 13px; color: #666; text-align: center; margin-bottom: 10px; font-weight: bold; }
+    
+    /* 検索条件を入力するカード風コンテナ */
     .search-card { background: white; padding: 20px; border-radius: 0; box-shadow: 0 2px 4px rgba(0,0,0,0.1); margin-bottom: 20px; width: 100%; box-sizing: border-box; }
+    
+    /* 各入力項目のグループ外枠 */
     .form-group { margin-bottom: 15px; width: 100%; box-sizing: border-box; }
+    
+    /* 各入力項目の見出しラベル */
     label { display: block; font-weight: bold; margin-bottom: 5px; }
+    
+    /* フォーム要素（選択肢・入力枠・ボタン）の共通スタイル（直角指定・レスポンシブ幅） */
     select, input, button { width: 100%; padding: 10px; font-size: 16px; border: 1px solid #ccc; border-radius: 0; box-sizing: border-box; max-width: 100%; }
     
-    /* 駅入れ替えボタン */
+    /* 出発駅と到着駅を入れ替えるボタンの配置エリア */
     .swap-container { text-align: center; margin: -5px 0 10px 0; }
+    
+    /* 駅入れ替えボタン本体の見た目 */
     .swap-btn {
       background: #f0f0f0; color: #333; border: 1px solid #ccc; border-radius: 0;
       font-size: 14px; padding: 6px 16px; margin-top: 0; width: auto;
@@ -21,26 +34,54 @@
     }
     .swap-btn:hover { background: #e0e0e0; }
 
-    /* 指定時刻入力＋現在ボタン */
+    /* 指定時刻入力枠と「現在」ボタンを並べる横並びコンテナ（スマホでの食い込み・はみ出しを防止） */
     .time-input-container { display: flex; gap: 8px; align-items: center; width: 100%; box-sizing: border-box; }
+    
+    /* 指定時刻の時刻選択インプット */
     .time-input-container input[type="time"] { flex: 1; min-width: 0; border-radius: 0; }
+    
+    /* 現在時刻セットボタン */
     .now-btn { width: auto; white-space: nowrap; margin-top: 0; background: #666; color: white; padding: 10px 16px; flex-shrink: 0; cursor: pointer; border: none; border-radius: 0; }
     .now-btn:hover { background: #555; }
 
+    /* 「経路を検索する」メイン実行ボタン */
     .search-submit-btn { background: #0066cc; color: white; font-weight: bold; cursor: pointer; border: none; margin-top: 10px; border-radius: 0; }
     .search-submit-btn:hover { background: #0052a3; }
+    
+    /* ボタン押下不可（読み込み中など）の状態表示 */
     button:disabled { background: #ccc; cursor: not-allowed; }
 
+    /* 検索結果の1経路ごとのカード枠 */
     .result-item { background: white; padding: 15px; margin-bottom: 10px; border-radius: 0; border-left: 5px solid #0066cc; box-shadow: 0 1px 3px rgba(0,0,0,0.1); width: 100%; box-sizing: border-box; }
+    
+    /* 検索結果カードの上部見出し（発着駅・発着時刻・所要時間） */
     .route-header { font-size: 16px; line-height: 1.5; }
+    
+    /* 経路内の各乗換ステップ（区間ごとの詳細） */
     .route-step { margin: 8px 0; font-size: 15px; padding-left: 10px; border-left: 2px solid #ddd; }
+    
+    /* 共通バッジタグ（種別・区間表示用） */
     .badge { display: inline-block; padding: 2px 8px; font-size: 12px; background: #eee; border-radius: 0; margin-right: 5px; }
+    
+    /* 直通・乗換回数を示す青色強調バッジ */
     .badge-trans { background: #e3f2fd; color: #1565c0; font-weight: bold; }
+    
+    /* 所要時間を示す緑色強調バッジ */
     .duration-badge { margin-left: 8px; font-weight: bold; color: #2e7d32; display: inline-block; }
+    
+    /* 発着時刻の赤色文字強調 */
     .time { font-weight: bold; color: #d32f2f; }
+    
+    /* 読み込み状態・エラーのメッセージテキスト */
     .status-msg { text-align: center; color: #666; font-size: 14px; margin-bottom: 10px; }
+    
+    /* ページネーション（前へ/次へボタン）の横並びエリア */
     .pagination-container { display: flex; justify-content: space-between; align-items: center; margin: 15px 0; width: 100%; box-sizing: border-box; }
+    
+    /* ページネーション内のボタン */
     .pagination-container button { width: auto; padding: 8px 16px; margin-top: 0; border-radius: 0; }
+    
+    /* ページネーションの現在ページ情報テキスト */
     .pagination-info { font-weight: bold; color: #555; }
   </style>
 </head>
@@ -75,6 +116,18 @@
     </div>
 
     <div class="form-group">
+      <label>乗換の余裕（最低待ち時間）</label>
+      <select id="minTransferTime">
+        <option value="0">0分以上</option>
+        <option value="2">2分以上</option>
+        <option value="3">3分以上</option>
+        <option value="5" selected>5分以上</option>
+        <option value="7">7分以上</option>
+        <option value="10">10分以上</option>
+      </select>
+    </div>
+
+    <div class="form-group">
       <label>検索基準</label>
       <select id="searchType">
         <option value="dep">出発時刻指定</option>
@@ -95,7 +148,7 @@
       <select id="sortOrder">
         <option value="depAsc">時間早い順（開始時刻が早い順）</option>
         <option value="arrDesc">時間遅い順（終了時刻が遅い順）</option>
-        <option value="duration">所要時間順（使えない）</option>
+        <option value="duration">所要時間順（指定時刻から2時間以内出発）</option>
       </select>
     </div>
 
@@ -138,6 +191,7 @@
       return h > 0 ? `${h}時間${m}分` : `${m}分`;
     }
 
+    // 現在ボタン押下時処理（5分刻み切り上げ）
     function setCurrentDateTime() {
       const now = new Date();
       const day = now.getDay();
@@ -151,9 +205,19 @@
         daySelect.value = '平日';
       }
 
-      const hours = String(now.getHours()).padStart(2, '0');
-      const minutes = String(now.getMinutes()).padStart(2, '0');
-      document.getElementById('searchTime').value = `${hours}:${minutes}`;
+      let hours = now.getHours();
+      let minutes = now.getMinutes();
+
+      // 分を直近の5分刻みに切り上げ (例: 12分 -> 15分, 58分 -> 00分(+1時間))
+      minutes = Math.ceil(minutes / 5) * 5;
+      if (minutes >= 60) {
+        minutes = 0;
+        hours = (hours + 1) % 24;
+      }
+
+      const hStr = String(hours).padStart(2, '0');
+      const mStr = String(minutes).padStart(2, '0');
+      document.getElementById('searchTime').value = `${hStr}:${mStr}`;
     }
 
     function swapStations() {
@@ -285,6 +349,8 @@
       const searchType = document.getElementById('searchType').value;
       const targetMin = timeToMinutes(document.getElementById('searchTime').value);
       const selectedDay = document.getElementById('dayType').value;
+      const minTransferMin = Number(document.getElementById('minTransferTime').value);
+      const sortOrder = document.getElementById('sortOrder').value;
       const maxTransfers = 4;
 
       let foundRoutes = [];
@@ -310,11 +376,18 @@
 
           let isValid = true;
           
-          // 【追加】日を跨ぐ経路（到着が出発より前になる場合）を排除
+          // 日を跨ぐ経路の除外
           if (arrTimeMin < depTimeMin) isValid = false;
 
           if (searchType === 'dep' && depTimeMin < targetMin) isValid = false;
           if (searchType === 'arr' && arrTimeMin > targetMin) isValid = false;
+
+          // 所要時間順選択時：乗換開始時刻（出発時刻）が指定時刻から2時間（120分）以上離れている場合は除外
+          if (sortOrder === 'duration') {
+            if (depTimeMin < targetMin || depTimeMin > targetMin + 120) {
+              isValid = false;
+            }
+          }
 
           if (isValid) {
             const durationMin = arrTimeMin - depTimeMin;
@@ -344,22 +417,30 @@
           const rDepMin = timeToMinutes(r.出発時刻);
           const rArrMin = timeToMinutes(r.到着時刻);
 
-          // 【追加】単体ステップで深夜0時を超えて日を跨ぐ便を除外
+          // 単一区間で日を跨ぐ便を除外
           if (rArrMin < rDepMin) continue;
 
-          if (rDepMin >= state.currentTimeMin) {
-            if (searchType === 'arr' && rArrMin > targetMin) continue;
-
-            const newVisited = new Set(state.visited);
-            newVisited.add(r.到着駅);
-
-            queue.push({
-              currentStation: r.到着駅,
-              currentTimeMin: rArrMin,
-              steps: [...state.steps, r],
-              visited: newVisited
-            });
+          // 乗換時間チェック（2区間目以降は、前の到着時刻 + 指定余裕時間 以上が必要）
+          if (state.steps.length > 0) {
+            const prevStep = state.steps[state.steps.length - 1];
+            const prevArrMin = timeToMinutes(prevStep.到着時刻);
+            if (rDepMin < prevArrMin + minTransferMin) continue;
+          } else {
+            // 最初の区間の場合は指定時刻以降
+            if (rDepMin < state.currentTimeMin) continue;
           }
+
+          if (searchType === 'arr' && rArrMin > targetMin) continue;
+
+          const newVisited = new Set(state.visited);
+          newVisited.add(r.到着駅);
+
+          queue.push({
+            currentStation: r.到着駅,
+            currentTimeMin: rArrMin,
+            steps: [...state.steps, r],
+            visited: newVisited
+          });
         }
       }
 
@@ -390,7 +471,6 @@
       }
 
       // ソート処理
-      const sortOrder = document.getElementById('sortOrder').value;
       uniqueResults.sort((a, b) => {
         if (sortOrder === 'depAsc') {
           if (a.depMin !== b.depMin) return a.depMin - b.depMin;
