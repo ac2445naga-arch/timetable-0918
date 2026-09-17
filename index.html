@@ -116,40 +116,6 @@
     </div>
 
     <div class="form-group">
-      <label>検索対象範囲（指定時刻からの出発時間）</label>
-      <select id="maxDepWait">
-        <option value="60">1時間以内に出発</option>
-        <option value="120" selected>2時間以内に出発</option>
-        <option value="180">3時間以内に出発</option>
-        <option value="360">6時間以内に出発</option>
-        <option value="9999">制限なし</option>
-      </select>
-    </div>
-
-    <div class="form-group">
-      <label>乗換の余裕（最低待ち時間）</label>
-      <select id="minTransferTime">
-        <option value="0">0分以上</option>
-        <option value="2">2分以上</option>
-        <option value="3">3分以上</option>
-        <option value="5" selected>5分以上</option>
-        <option value="7">7分以上</option>
-        <option value="10">10分以上</option>
-      </select>
-    </div>
-
-    <div class="form-group">
-      <label>乗換の最大待ち時間</label>
-      <select id="maxTransferWait">
-        <option value="30">30分以内</option>
-        <option value="60">60分以内</option>
-        <option value="120" selected>2時間以内</option>
-        <option value="180">3時間以内</option>
-        <option value="9999">制限なし</option>
-      </select>
-    </div>
-
-    <div class="form-group">
       <label>検索基準</label>
       <select id="searchType">
         <option value="dep">出発時刻指定</option>
@@ -369,9 +335,6 @@
       const searchType = document.getElementById('searchType').value;
       const targetMin = timeToMinutes(document.getElementById('searchTime').value);
       const selectedDay = document.getElementById('dayType').value;
-      const minTransferMin = Number(document.getElementById('minTransferTime').value);
-      const maxTransferWaitMin = Number(document.getElementById('maxTransferWait').value);
-      const maxDepWaitMin = Number(document.getElementById('maxDepWait').value);
       const sortOrder = document.getElementById('sortOrder').value;
       const maxTransfers = 4;
 
@@ -399,12 +362,7 @@
           let isValid = true;
           
           if (arrTimeMin < depTimeMin) isValid = false;
-
-          if (searchType === 'dep') {
-            if (depTimeMin < targetMin) isValid = false;
-            // 指定時刻から最初の出発までの時間が制限（デフォルト2時間）を超えている場合は除外
-            if (depTimeMin > targetMin + maxDepWaitMin) isValid = false;
-          }
+          if (searchType === 'dep' && depTimeMin < targetMin) isValid = false;
           if (searchType === 'arr' && arrTimeMin > targetMin) isValid = false;
 
           if (isValid) {
@@ -437,17 +395,15 @@
 
           if (rArrMin < rDepMin) continue;
 
-          // 最初の区間の場合、指定時刻〜指定最大待ち時間内に収まっているか判定
+          // 時間経過順守チェック（前便の到着時刻以降に出発する便のみ許可）
           if (state.steps.length === 0) {
             if (rDepMin < state.currentTimeMin) continue;
-            if (searchType === 'dep' && rDepMin > targetMin + maxDepWaitMin) continue;
           } else {
-            // 2区間目以降（乗換）の場合、直前便の到着時刻からの最小・最大待ち時間を判定
             const prevStep = state.steps[state.steps.length - 1];
             const prevArrMin = timeToMinutes(prevStep.到着時刻);
-            const waitTime = rDepMin - prevArrMin;
-
-            if (waitTime < minTransferMin || waitTime > maxTransferWaitMin) continue;
+            
+            // 乗換時間が負（到着前の出発）の場合は除外
+            if (rDepMin < prevArrMin) continue;
           }
 
           if (searchType === 'arr' && rArrMin > targetMin) continue;
