@@ -20,7 +20,7 @@
     /* 各入力項目の見出しラベル */
     label { display: block; font-weight: bold; margin-bottom: 5px; }
     
-    /* フォーム要素（選択肢・入力枠・ボタン）の共通スタイル（直角指定・レスポンシブ幅） */
+    /* フォーム要素（選択肢・入力枠・ボタン）の共通スタイル */
     select, input, button { width: 100%; padding: 10px; font-size: 16px; border: 1px solid #ccc; border-radius: 0; box-sizing: border-box; max-width: 100%; }
     
     /* 出発駅と到着駅を入れ替えるボタンの配置エリア */
@@ -45,43 +45,39 @@
     .now-btn:hover { background: #555; }
 
     /* 「経路を検索する」メイン実行ボタン */
-    .search-submit-btn { background: #0066cc; color: white; font-weight: bold; cursor: pointer; border: none; margin-top: 10px; border-radius: 0; }
-    .search-submit-btn:hover { background: #0052a3; }
+    .search-submit-btn { background: #004080; color: white; font-weight: bold; cursor: pointer; border: none; margin-top: 10px; border-radius: 0; }
+    .search-submit-btn:hover { background: #003366; }
     
-    /* ボタン押下不可（読み込み中など）の状態表示 */
+    /* ボタン押下不可の状態表示 */
     button:disabled { background: #ccc; cursor: not-allowed; }
 
     /* 検索結果の1経路ごとのカード枠 */
-    .result-item { background: white; padding: 15px; margin-bottom: 10px; border-radius: 0; border-left: 5px solid #0066cc; box-shadow: 0 1px 3px rgba(0,0,0,0.1); width: 100%; box-sizing: border-box; }
+    .result-item { background: white; padding: 15px; margin-bottom: 10px; border-radius: 0; border-left: 5px solid #004080; box-shadow: 0 1px 3px rgba(0,0,0,0.1); width: 100%; box-sizing: border-box; }
     
-    /* 検索結果カードの上部見出し（発着駅・発着時刻・所要時間） */
+    /* 検索結果カードの上部見出し */
     .route-header { font-size: 16px; line-height: 1.5; }
     
-    /* 経路内の各乗換ステップ（区間ごとの詳細） */
+    /* 経路内の各乗換ステップ */
     .route-step { margin: 8px 0; font-size: 15px; padding-left: 10px; border-left: 2px solid #ddd; }
     
-    /* 共通バッジタグ（種別・区間表示用） */
+    /* 共通バッジタグ */
     .badge { display: inline-block; padding: 2px 8px; font-size: 12px; background: #eee; border-radius: 0; margin-right: 5px; }
     
-    /* 直通・乗換回数を示す青色強調バッジ */
+    /* 直通・乗換回数バッジ */
     .badge-trans { background: #e3f2fd; color: #1565c0; font-weight: bold; }
     
-    /* 所要時間を示す緑色強調バッジ */
+    /* 所要時間バッジ */
     .duration-badge { margin-left: 8px; font-weight: bold; color: #2e7d32; display: inline-block; }
     
     /* 発着時刻の赤色文字強調 */
     .time { font-weight: bold; color: #d32f2f; }
     
-    /* 読み込み状態・エラーのメッセージテキスト */
+    /* 読み込み状態・エラーテキスト */
     .status-msg { text-align: center; color: #666; font-size: 14px; margin-bottom: 10px; }
     
-    /* ページネーション（前へ/次へボタン）の横並びエリア */
+    /* ページネーションエリア */
     .pagination-container { display: flex; justify-content: space-between; align-items: center; margin: 15px 0; width: 100%; box-sizing: border-box; }
-    
-    /* ページネーション内のボタン */
     .pagination-container button { width: auto; padding: 8px 16px; margin-top: 0; border-radius: 0; }
-    
-    /* ページネーションの現在ページ情報テキスト */
     .pagination-info { font-weight: bold; color: #555; }
   </style>
 </head>
@@ -91,15 +87,6 @@
 
   <div class="search-card">
     <div id="status" class="status-msg">データを読み込み中...</div>
-    
-    <div class="form-group">
-      <label>乗車日（曜日）</label>
-      <select id="dayType" disabled>
-        <option value="平日">平日</option>
-        <option value="土曜">土曜日</option>
-        <option value="日祝">日曜日・祝日</option>
-      </select>
-    </div>
 
     <div class="form-group">
       <label>出発駅</label>
@@ -124,7 +111,7 @@
     </div>
 
     <div class="form-group">
-      <label id="timeLabel">指定時刻 (HH:MM)</label>
+      <label id="timeLabel">時刻指定</label>
       <div class="time-input-container">
         <input type="time" id="searchTime" value="08:30">
         <button type="button" class="now-btn" onclick="setCurrentDateTime()">現在</button>
@@ -132,7 +119,16 @@
     </div>
 
     <div class="form-group">
-      <label>並び順</label>
+      <label>乗車する曜日</label>
+      <select id="dayType" disabled>
+        <option value="平日">平日</option>
+        <option value="土曜">土曜日</option>
+        <option value="日祝">日曜日・祝日</option>
+      </select>
+    </div>
+
+    <div class="form-group">
+      <label>並び替え</label>
       <select id="sortOrder">
         <option value="depAsc">時間早い順</option>
         <option value="arrDesc">時間遅い順</option>
@@ -152,7 +148,7 @@
     let currentPage = 1;
     const itemsPerPage = 5;
 
-    const TAKADA_STATIONS = ['短大高専前', '高田駅前', '肥後高田'];
+    const kosen_STATIONS = ['短大高専前', '高田駅前', '肥後高田'];
 
     function normalizeStr(str) {
       return (str || '').toString().trim();
@@ -272,7 +268,7 @@
       } catch (error) {
         console.error(error);
         statusDiv.style.color = 'red';
-        statusDiv.textContent = 'データの読み込みに失敗しました。jsonファイルを確認してください。';
+        statusDiv.textContent = 'データの読み込みに失敗しました。';
       }
     }
 
@@ -285,34 +281,55 @@
     }
 
     function getStationList(val) {
-      if (val === 'GROUP_TAKADA') return TAKADA_STATIONS;
+      if (val === 'GROUP_kosen') return kosen_STATIONS;
       return [val];
     }
 
     function initStationSelects() {
-      const stations = Array.from(new Set(routes.flatMap(r => [r.出発駅, r.到着駅]))).sort();
+      const allStationsInRoutes = Array.from(new Set(routes.flatMap(r => [r.出発駅, r.到着駅])));
+      
+      // 指定された駅の並び順
+      const customOrder = [
+        '上熊本',
+        '熊本',
+        '新八代',
+        '八代',
+        '肥後高田',
+        '短大高専前',
+        '高田駅前',
+        'GROUP_kosen'
+      ];
+
       const depSelect = document.getElementById('depStation');
       const arrSelect = document.getElementById('arrStation');
 
       depSelect.innerHTML = '';
       arrSelect.innerHTML = '';
 
-      const groupOptionText = '高田エリア（短大高専前・高田駅前・肥後高田）';
-      depSelect.add(new Option(groupOptionText, 'GROUP_TAKADA'));
-      arrSelect.add(new Option(groupOptionText, 'GROUP_TAKADA'));
+      customOrder.forEach(item => {
+        if (item === 'GROUP_kosen') {
+          const groupText = '高専エリア（肥後高田・短大高専前・高田駅前）';
+          depSelect.add(new Option(groupText, 'GROUP_kosen'));
+          arrSelect.add(new Option(groupText, 'GROUP_kosen'));
+        } else if (allStationsInRoutes.includes(item)) {
+          depSelect.add(new Option(item, item));
+          arrSelect.add(new Option(item, item));
+        }
+      });
 
-      stations.forEach(s => {
+      // その他の駅が存在する場合は末尾に追加
+      const otherStations = allStationsInRoutes
+        .filter(s => !customOrder.includes(s))
+        .sort();
+
+      otherStations.forEach(s => {
         depSelect.add(new Option(s, s));
         arrSelect.add(new Option(s, s));
       });
 
-      if (stations.includes('熊本')) {
-        depSelect.value = '熊本';
-      } else {
-        depSelect.selectedIndex = 0;
-      }
-
-      arrSelect.value = 'GROUP_TAKADA';
+      // デフォルト選択肢（出発駅: 熊本, 到着駅: 高田エリア）
+      depSelect.value = '熊本';
+      arrSelect.value = 'GROUP_kosen';
     }
 
     function searchRoute() {
@@ -361,6 +378,7 @@
 
           let isValid = true;
           
+          // 日を跨ぐ経路（最終到着が出発時刻より前の数値になる等）のチェック
           if (arrTimeMin < depTimeMin) isValid = false;
           if (searchType === 'dep' && depTimeMin < targetMin) isValid = false;
           if (searchType === 'arr' && arrTimeMin > targetMin) isValid = false;
@@ -393,16 +411,17 @@
           const rDepMin = timeToMinutes(r.出発時刻);
           const rArrMin = timeToMinutes(r.到着時刻);
 
+          // 同一区間内で日を跨ぐ便（夜発→翌朝着等）の不整合を除外
           if (rArrMin < rDepMin) continue;
 
-          // 時間経過順守チェック（前便の到着時刻以降に出発する便のみ許可）
+          // 時間経過順守チェック（日を跨ぐ乗り継ぎを除外）
           if (state.steps.length === 0) {
             if (rDepMin < state.currentTimeMin) continue;
           } else {
             const prevStep = state.steps[state.steps.length - 1];
             const prevArrMin = timeToMinutes(prevStep.到着時刻);
             
-            // 乗換時間が負（到着前の出発）の場合は除外
+            // 次便の出発が前便の到着より早い場合（日を跨ぐ・逆行する経路）を除外
             if (rDepMin < prevArrMin) continue;
           }
 
