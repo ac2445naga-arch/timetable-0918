@@ -83,7 +83,7 @@
 </head>
 <body>
 
-  <div class="disclaimer">正確さを保証するものではありません。公式の情報とあわせて確認してください。<br>おれんじ代行の「肥後高田」が停まるのは駅ではありません。代行バスのバス停は「短大高専前」になっています。</div>
+  <div class="disclaimer">正確さを保証するものではありません。<br>公式の情報とあわせて確認してください。<br>おれんじ代行の「肥後高田」が停まるのは駅ではありません。代行バスのバス停は「短大高専前」になっています。</div>
 
   <div class="search-card">
     <div id="status" class="status-msg">データを読み込み中...</div>
@@ -502,7 +502,7 @@
       if (totalPages > 1) {
         paginationDiv.innerHTML = `
           <button onclick="changePage(-1)" ${currentPage === 1 ? 'disabled' : ''}>前の5件</button>
-          <span class="pagination-info">${currentPage} / ${totalPages} ページ\n（全 ${allSearchResults.length} 件）</span>
+          <span class="pagination-info">${currentPage} / ${totalPages} ページ<br>（全 ${allSearchResults.length} 件）</span>
           <button onclick="changePage(1)" ${currentPage === totalPages ? 'disabled' : ''}>次の5件</button>
         `;
       }
