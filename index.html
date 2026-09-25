@@ -83,7 +83,10 @@
 </head>
 <body>
 
-  <div class="disclaimer">正確さを保証するものではありません。<br>公式の情報とあわせて確認してください。<br>おれんじ代行の「肥後高田」が停まるのは駅ではありません。代行バスのバス停は「短大高専前」になっています。</div>
+  <div class="disclaimer">正確さを保証するものではありません。公式の情報とあわせて確認してください。<br>
+    おれんじ代行の「肥後高田」が停まるのは駅ではありません。代行バスのバス停は「短大高専前」になっています。<br>
+    不具合やご意見は<a href="https://forms.gle/dxqxyJ8oSVwspmHv8" target="_blank">こちら</a>から
+  </div>
 
   <div class="search-card">
     <div id="status" class="status-msg">データを読み込み中...</div>
@@ -113,7 +116,7 @@
     <div class="form-group">
       <label id="timeLabel">時刻指定</label>
       <div class="time-input-container">
-        <input type="time" id="searchTime" value="08:30">
+        <input type="time" id="searchTime" value="08:40">
         <button type="button" class="now-btn" onclick="setCurrentDateTime()">現在</button>
       </div>
     </div>
@@ -130,8 +133,8 @@
     <div class="form-group">
       <label>並び替え</label>
       <select id="sortOrder">
-        <option value="depAsc">時間早い順</option>
-        <option value="arrDesc">時間遅い順</option>
+        <option value="arrDesc">到着遅い順</option>
+        <option value="depAsc">到着早い順</option>
         <option value="duration">所要時間順</option>
       </select>
     </div>
